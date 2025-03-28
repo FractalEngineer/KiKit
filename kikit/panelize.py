@@ -1541,11 +1541,15 @@ class Panel:
         cuts += [ [(x_coords[2], y_coord), (x_coords[3], y_coord)] for y_coord in y_coords ]
         return map(LineString, cuts)
 
-    def makeVCuts(self, cuts, boundCurves=False, offset=fromMm(0)):
+
+    def makeVCuts(self, cuts, boundCurves=False, offset=fromMm(0), offsetClearance=fromMm(0)):
         """
         Take a list of lines to cut and performs V-CUTS. When boundCurves is
         set, approximate curved cuts by a line from the first and last point.
         Otherwise, make an approximate cut and report error.
+        
+        If offsetClearance is specified, it will increase the board size around the cut
+        by that amount on each side while keeping a single centered V-cut.
         """
         for cut in cuts:
             if len(cut.simplify(SHP_EPSILON).coords) > 2 and not boundCurves:
@@ -1557,23 +1561,58 @@ class Panel:
                 self._renderLines([cut], Layer.Margin)
                 self.reportError(toKiCADPoint(cut.coords[0]), message)
                 continue
+            
+            # Create a parallel cut with the offset
             cut = cut.simplify(1).parallel_offset(offset, "left")
             start = roundPoint(cut.coords[0])
             end = roundPoint(cut.coords[-1])
-            if start.x == end.x or (abs(start.x - end.x) <= fromMm(0.5) and boundCurves):
-                self.addVCutV((start.x + end.x) / 2)
-            elif start.y == end.y or (abs(start.y - end.y) <= fromMm(0.5) and boundCurves):
-                self.addVCutH((start.y + end.y) / 2)
+            
+            if offsetClearance > 0:
+                # Expand the board geometry around the V-cut position
+                if start.x == end.x or (abs(start.x - end.x) <= fromMm(0.5) and boundCurves):
+                    # Vertical cut - expand horizontally
+                    midX = (start.x + end.x) / 2
+                    cutBox = shapely.geometry.box(
+                        midX - offsetClearance, 
+                        min(start.y, end.y), 
+                        midX + offsetClearance, 
+                        max(start.y, end.y)
+                    )
+                    self.appendSubstrate(cutBox)
+                    self.addVCutV(midX)
+                elif start.y == end.y or (abs(start.y - end.y) <= fromMm(0.5) and boundCurves):
+                    # Horizontal cut - expand vertically
+                    midY = (start.y + end.y) / 2
+                    cutBox = shapely.geometry.box(
+                        min(start.x, end.x), 
+                        midY - offsetClearance, 
+                        max(start.x, end.x), 
+                        midY + offsetClearance
+                    )
+                    self.appendSubstrate(cutBox)
+                    self.addVCutH(midY)
+                else:
+                    description = f"[{toMm(start.x)}, {toMm(start.y)}] -> [{toMm(end.x)}, {toMm(end.y)}]"
+                    message = f"Cannot perform V-Cut with offset clearance on a non-horizontal/vertical line ({description}).\n"
+                    message += "Offset clearance can only be applied to horizontal or vertical cuts."
+                    self._renderLines([cut], Layer.Margin)
+                    self.reportError(toKiCADPoint(start), message)
             else:
-                description = f"[{toMm(start.x)}, {toMm(start.y)}] -> [{toMm(end.x)}, {toMm(end.y)}]"
-                message = f"Cannot perform V-Cut which is not horizontal or vertical ({description}).\n"
-                message += "Possible cause might be:\n"
-                message += "- check that intended edges are truly horizonal or vertical\n"
-                message += "- check your tab placement if it as expected\n"
-                message += "You can use layer style of cuts to see them and validate them."
-                self._renderLines([cut], Layer.Margin)
-                self.reportError(toKiCADPoint(cut[0]), message)
-                continue
+                # Original behavior without offset clearance
+                if start.x == end.x or (abs(start.x - end.x) <= fromMm(0.5) and boundCurves):
+                    self.addVCutV((start.x + end.x) / 2)
+                elif start.y == end.y or (abs(start.y - end.y) <= fromMm(0.5) and boundCurves):
+                    self.addVCutH((start.y + end.y) / 2)
+                else:
+                    description = f"[{toMm(start.x)}, {toMm(start.y)}] -> [{toMm(end.x)}, {toMm(end.y)}]"
+                    message = f"Cannot perform V-Cut which is not horizontal or vertical ({description}).\n"
+                    message += "Possible cause might be:\n"
+                    message += "- check that intended edges are truly horizonal or vertical\n"
+                    message += "- check your tab placement if it as expected\n"
+                    message += "You can use layer style of cuts to see them and validate them."
+                    self._renderLines([cut], Layer.Margin)
+                    self.reportError(toKiCADPoint(cut.coords[0]), message)
+
 
     def makeMouseBites(self, cuts, diameter, spacing, offset=fromMm(0.25),
         prolongation=fromMm(0.5)):

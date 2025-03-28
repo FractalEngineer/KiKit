@@ -385,6 +385,14 @@ def makeCuts(properties, panel, cuts, ignoreOffset):
             panel.makeCutsToLayer(cuts,
                 layer=properties["layer"], prolongation=properties["prolong"],
                 width=properties["linewidth"])
+        elif type == "vcuts":
+            if "offsetclearance" in properties:
+                offsetClearance = properties["offsetclearance"]
+                panel.makeVCuts(cuts, properties["cutcurves"], properties["offset"], offsetClearance)
+            else:
+                panel.makeVCuts(cuts, properties["cutcurves"], properties["offset"])
+            panel.vCutSettings.layer = properties["layer"]
+            panel.vCutSettings.clearance = properties["clearance"]
         else:
             raise PresetError(f"Unknown type '{type}' of cuts specification.")
     except KeyError as e:

@@ -436,6 +436,9 @@ CUTS_SECTION = {
     "clearance": SLength(
         typeIn(["vcuts", "plugin"]),
         "Add copper clearance around V-cuts"),
+    "offsetclearance": SLength(
+        typeIn(["vcuts", "plugin"]),
+        "Add offset clearance to increase board size while keeping a single centered V-cut"),    
     "cutcurves": SBool(
         typeIn(["vcuts", "plugin"]),
         "Approximate curves with straight cut"),
